@@ -1,0 +1,45 @@
+.treasury-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: var(--color-white);
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--color-primary);
+}
+
+.stat-card h4 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.5rem;
+}
+
+.stat-card .amount {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: var(--color-dark);
+}
+
+/* Multi-month select container */
+select[multiple] {
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background-color: var(--color-white);
+}
+
+select[multiple] option {
+  padding: 0.5rem;
+  border-bottom: 1px solid #f8fafc;
+}
+
+select[multiple] option:checked {
+  background: #ecfdf5 linear-gradient(0deg, #ecfdf5 0%, #ecfdf5 100%);
+  color: var(--color-primary);
+  font-weight: 700;
+}
