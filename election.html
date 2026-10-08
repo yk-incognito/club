@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rivora Club | Executive Election</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <style>
+    .candidate-card {
+      background: white;
+      padding: 1.25rem;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .candidate-card.selected {
+      border-color: var(--color-primary-light);
+      background: #ecfdf5;
+    }
+    .selection-counter {
+      position: sticky;
+      bottom: 1.5rem;
+      background: var(--color-dark);
+      color: white;
+      padding: 1rem 2rem;
+      border-radius: 9999px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" style="max-width: 800px; margin: 3rem auto;">
+    <header style="margin-bottom: 2rem;">
+      <h1 style="color: var(--color-primary);">Executive Committee Ballot</h1>
+      <p>Select exactly <strong id="required-seats">18</strong> candidates to constitute the executive panel.</p>
+    </header>
+
+    <div id="candidates-container" style="display: grid; gap: 1rem;">
+      <!-- Populated dynamically via JS -->
+    </div>
+
+    <div class="selection-counter">
+      <span>Selected: <strong id="selected-count">0</strong> / <span id="max-seats">18</span></span>
+      <button id="submit-ballot-btn" class="btn btn-accent" disabled>Verify & Cast Ballot</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from './js/supabase-client.js';
+
+    let selectedCandidates = new Set();
+    const REQUIRED_SEATS = 18;
+
+    async function loadCandidates() {
+      const { data, error } = await supabase.from('candidates').select('id, profile_id, profiles(nickname, official_name)');
+      if (error) return alert('Failed to load candidate list.');
+      
+      const container = document.getElementById('candidates-container');
+      container.innerHTML = data.map(c => `
+        <div class="candidate-card" data-id="${c.id}" onclick="window.toggleCandidate('${c.id}')">
+          <div>
+            <strong>${c.profiles.nickname}</strong> (${c.profiles.official_name})
+          </div>
+          <span class="badge badge-pending status-tag">Unselected</span>
+        </div>
+      `).join('');
+    }
+
+    window.toggleCandidate = function(candidateId) {
+      const card = document.querySelector(`[data-id="${candidateId}"]`);
+      const statusTag = card.querySelector('.status-tag');
+
+      if (selectedCandidates.has(candidateId)) {
+        selectedCandidates.delete(candidateId);
+        card.classList.remove('selected');
+        statusTag.textContent = 'Unselected';
+        statusTag.className = 'badge badge-pending status-tag';
+      } else {
+        if (selectedCandidates.size >= REQUIRED_SEATS) {
+          alert(`You can only select a maximum of ${REQUIRED_SEATS} candidates.`);
+          return;
+        }
+        selectedCandidates.add(candidateId);
+        card.classList.add('selected');
+        statusTag.textContent = 'Chosen';
+        statusTag.className = 'badge badge-active status-tag';
+      }
+
+      document.getElementById('selected-count').textContent = selectedCandidates.size;
+      document.getElementById('submit-ballot-btn').disabled = (selectedCandidates.size !== REQUIRED_SEATS);
+    };
+
+    document.getElementById('submit-ballot-btn').addEventListener('click', async () => {
+      const password = prompt('Enter your password for ballot re-authentication:');
+      if (!password) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Call atomic zero-knowledge transaction
+      const { data, error } = await supabase.rpc('cast_election_vote', {
+        voter_uuid: user.id,
+        candidate_uuids: Array.from(selectedCandidates)
+      });
+
+      if (error) {
+        alert('Voting Failed: ' + error.message);
+      } else {
+        alert('Ballot successfully verified and cast. Thank you for voting.');
+        window.location.href = 'dashboard.html';
+      }
+    });
+
+    loadCandidates();
+  </script>
+</body>
+</html>
