@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rivora Club | Game Zone</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <style>
+    .game-arena { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; margin: 2rem 0; }
+    #canvas-container { background: #0f172a; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    canvas { display: block; }
+    .leaderboard-card { background: white; padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+    .leaderboard-row { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 style="margin: 2rem 0 1rem; color: var(--color-primary);">Rivora Reflex Runner</h2>
+    <div class="game-arena">
+      <div id="canvas-container">
+        <canvas id="gameCanvas" width="640" height="380"></canvas>
+      </div>
+
+      <div class="leaderboard-card">
+        <h3>Top Scorers (Live)</h3>
+        <p style="color: var(--color-muted); font-size: 0.85rem; margin-bottom: 1rem;">Leaderboard displays member nicknames.</p>
+        <div id="leaderboard-list">
+          <!-- Populated in real time -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/games.js"></script>
+</body>
+</html>
