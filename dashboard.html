@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rivora Club | Executive Dashboard</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <style>
+    .grid-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; margin: 2rem 0; }
+    .panel-card { background: white; padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); margin-bottom: 1.5rem; }
+    .word-counter { font-size: 0.8rem; text-align: right; color: var(--color-muted); margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin: 2rem 0;">
+      <div>
+        <h1 id="welcome-title">Dashboard</h1>
+        <p style="color: var(--color-muted);">Rivora Arts & Sports Club Management Portal</p>
+      </div>
+      <div id="admin-actions" style="display: none; gap: 0.75rem;">
+        <button id="backup-btn" class="btn btn-accent">One-Click Database Backup</button>
+      </div>
+    </div>
+
+    <div class="grid-layout">
+      <!-- Main Work Area -->
+      <div>
+        <!-- Pending Applications Approvals (Super Admin, President, Secretary) -->
+        <div class="panel-card" id="approvals-panel" style="display: none;">
+          <h3 style="margin-bottom: 1rem; color: var(--color-primary);">Pending Membership Registrations</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="text-align: left; border-bottom: 2px solid #e2e8f0;">
+                <th>Name</th>
+                <th>Nickname</th>
+                <th>Fee Slab</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="pending-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- System Audit Log Trail -->
+        <div class="panel-card" id="audit-panel" style="display: none;">
+          <h3 style="margin-bottom: 1rem;">System Audit Trail</h3>
+          <div id="audit-log-list" style="max-height: 280px; overflow-y: auto; font-size: 0.85rem;"></div>
+        </div>
+
+        <!-- 300-Word Suggestion Box -->
+        <div class="panel-card">
+          <h3 style="margin-bottom: 0.5rem;">Submit Club Feedback / Suggestion</h3>
+          <p style="font-size: 0.85rem; color: var(--color-muted); margin-bottom: 1rem;">
+            Submissions are confidential and routed directly to the President, Secretary, and Treasurer.
+          </p>
+          <textarea id="suggestion-text" rows="5" style="width: 100%; padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid #cbd5e1;" placeholder="Enter your suggestion (max 300 words)..."></textarea>
+          <div class="word-counter"><span id="word-count">0</span> / 300 words</div>
+          <button id="submit-suggestion-btn" class="btn btn-primary" style="margin-top: 0.75rem;">Submit Privately</button>
+        </div>
+      </div>
+
+      <!-- Quick Navigation Sidebar -->
+      <div>
+        <div class="panel-card">
+          <h3>Quick Links</h3>
+          <ul style="list-style: none; margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+            <li><a href="directory.html" style="color: var(--color-primary); font-weight: 600;">Member Directory</a></li>
+            <li><a href="treasury.html" style="color: var(--color-primary); font-weight: 600;">Treasury & Fees</a></li>
+            <li><a href="election.html" style="color: var(--color-primary); font-weight: 600;">Election Portal</a></li>
+            <li><a href="games.html" style="color: var(--color-primary); font-weight: 600;">Club Game Zone</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from './js/supabase-client.js';
+    import { enforceAuth } from './js/auth-guard.js';
+
+    let currentProfile = null;
+
+    async function init() {
+      currentProfile = await enforceAuth();
+      if (!currentProfile) return;
+
+      document.getElementById('welcome-title').textContent = `Welcome, ${currentProfile.nickname}`;
+
+      const isExecutive = ['super_admin', 'president', 'secretary'].includes(currentProfile.role);
+
+      if (isExecutive) {
+        document.getElementById('admin-actions').style.display = 'flex';
+        document.getElementById('approvals-panel').style.display = 'block';
+        document.getElementById('audit-panel').style.display = 'block';
+        loadPendingApplications();
+        loadAuditLogs();
+        setupBackup();
+      }
+    }
+
+    async function loadPendingApplications() {
+      const { data: pending } = await supabase.from('profiles').select('*').eq('status', 'pending');
+      const tbody = document.getElementById('pending-tbody');
+      tbody.innerHTML = (pending || []).map(p => `
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td>${p.official_name}</td>
+          <td>${p.nickname}</td>
+          <td>${p.fee_type === 'regular_150' ? '₹150' : '₹30'}</td>
+          <td>
+            <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="window.approveMember('${p.id}')">Approve</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    window.approveMember = async (targetId) => {
+      // Calls stored procedure with concurrency row lock
+      const { data: assignedId, error } = await supabase.rpc('approve_member_application', {
+        target_user_id: targetId,
+        executor_id: currentProfile.id
+      });
+      if (error) alert(error.message);
+      else {
+        alert(`Member Approved! Allocated Register Number: ${assignedId}`);
+        loadPendingApplications();
+      }
+    };
+
+    async function loadAuditLogs() {
+      const { data: logs } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
+      const container = document.getElementById('audit-log-list');
+      container.innerHTML = (logs || []).map(l => `
+        <div style="padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9;">
+          <strong>${l.action}</strong> - <span style="color: var(--color-muted);">${new Date(l.created_at).toLocaleString()}</span>
+        </div>
+      `).join('');
+    }
+
+    // 300-word counter enforcement
+    const suggestionArea = document.getElementById('suggestion-text');
+    const wordCounterDisplay = document.getElementById('word-count');
+
+    suggestionArea.addEventListener('input', () => {
+      const words = suggestionArea.value.trim().split(/\s+/).filter(w => w.length > 0);
+      wordCounterDisplay.textContent = words.length;
+      if (words.length > 300) {
+        wordCounterDisplay.style.color = 'var(--color-danger)';
+        document.getElementById('submit-suggestion-btn').disabled = true;
+      } else {
+        wordCounterDisplay.style.color = 'var(--color-muted)';
+        document.getElementById('submit-suggestion-btn').disabled = false;
+      }
+    });
+
+    document.getElementById('submit-suggestion-btn').onclick = async () => {
+      const words = suggestionArea.value.trim().split(/\s+/).filter(w => w.length > 0);
+      if (words.length > 300) return alert('Strict 300-word limit exceeded.');
+      
+      const { error } = await supabase.from('suggestions').insert([{
+        member_id: currentProfile.id,
+        content: suggestionArea.value.trim()
+      }]);
+      if (error) alert(error.message);
+      else {
+        alert('Suggestion submitted directly to executive inbox.');
+        suggestionArea.value = '';
+        wordCounterDisplay.textContent = '0';
+      }
+    };
+
+    function setupBackup() {
+      document.getElementById('backup-btn').onclick = async () => {
+        const { data: profiles } = await supabase.from('profiles').select('*');
+        const { data: treasury } = await supabase.from('treasury_records').select('*');
+        const { data: audit } = await supabase.from('activity_logs').select('*');
+
+        const backupBundle = {
+          export_timestamp: new Date().toISOString(),
+          profiles,
+          treasury,
+          audit
+        };
+
+        const blob = new Blob([JSON.stringify(backupBundle, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `rivora_club_backup_${Date.now()}.json`;
+        a.click();
+      };
+    }
+
+    init();
+  </script>
+</body>
+</html>
