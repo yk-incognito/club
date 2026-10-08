@@ -1,5 +1,3 @@
-# club
-
 rivora-club/
 │
 ├── index.html              # Public portal, history, rules, and feed
