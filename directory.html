@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rivora Club | Members Directory</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <style>
+    .directory-header { display: flex; justify-content: space-between; align-items: center; margin: 2rem 0; }
+    .directory-table { width: 100%; border-collapse: collapse; background: white; border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .directory-table th, .directory-table td { padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    .directory-table th { background: #f8fafc; font-weight: 700; color: var(--color-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="directory-header">
+      <div>
+        <h2>Active Club Roll</h2>
+        <p style="color: var(--color-muted);">Total Active Members: <strong id="total-count">0</strong></p>
+      </div>
+      <div id="exec-capacity-control" style="display: none; align-items: center; gap: 0.5rem;">
+        <label for="seat-limit" style="font-weight: 600; font-size: 0.85rem;">Executive Seat Limit:</label>
+        <input type="number" id="seat-limit" value="18" style="width: 70px; padding: 0.4rem;">
+        <button id="save-seats-btn" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Update</button>
+      </div>
+    </div>
+
+    <table class="directory-table">
+      <thead>
+        <tr>
+          <th>Reg No</th>
+          <th>Official Name</th>
+          <th>Club Nickname</th>
+          <th>Role / Status</th>
+        </tr>
+      </thead>
+      <tbody id="directory-body">
+        <!-- Dynamically rendered rows without heavy photo assets -->
+      </tbody>
+    </table>
+  </div>
+
+  <script type="module">
+    import { supabase } from './js/supabase-client.js';
+    import { enforceAuth } from './js/auth-guard.js';
+
+    async function init() {
+      const profile = await enforceAuth();
+      if (!profile) return;
+
+      // Display dynamic executive seat controls for Super Admin, President, or Secretary
+      if (['super_admin', 'president', 'secretary'].includes(profile.role)) {
+        const controlDiv = document.getElementById('exec-capacity-control');
+        controlDiv.style.display = 'flex';
+
+        const { data: settings } = await supabase.from('election_settings').select('max_seats').eq('id', 1).single();
+        if (settings) document.getElementById('seat-limit').value = settings.max_seats;
+
+        document.getElementById('save-seats-btn').onclick = async () => {
+          const val = parseInt(document.getElementById('seat-limit').value, 10);
+          await supabase.from('election_settings').update({ max_seats: val }).eq('id', 1);
+          alert('Executive seat count adjusted to ' + val);
+        };
+      }
+
+      // Fast fetch: textual fields only
+      const { data: members, count } = await supabase
+        .from('profiles')
+        .select('reg_no, official_name, nickname, role', { count: 'exact' })
+        .eq('status', 'active')
+        .order('reg_no', { ascending: true });
+
+      document.getElementById('total-count').textContent = members ? members.length : 0;
+      const tbody = document.getElementById('directory-body');
+      tbody.innerHTML = (members || []).map(m => `
+        <tr>
+          <td><strong>#${m.reg_no}</strong></td>
+          <td>${m.official_name}</td>
+          <td>${m.nickname}</td>
+          <td><span class="badge ${m.role !== 'general' ? 'badge-active' : ''}">${m.role.replace('_', ' ')}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    init();
+  </script>
+</body>
+</html>
