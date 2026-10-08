@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rivora Club | Membership Application</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/navbar.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+  <style>
+    .auth-container { max-width: 540px; margin: 3rem auto; background: var(--color-white); padding: 2.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+    .form-group { margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.4rem; }
+    .form-group label { font-weight: 600; font-size: 0.9rem; }
+    .form-group input, .form-group select { padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: var(--radius-md); font-size: 1rem; }
+    .crop-preview-wrapper { width: 100%; max-height: 320px; overflow: hidden; display: none; margin: 1rem 0; background: #000; border-radius: var(--radius-md); }
+    #crop-preview-img { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container navbar">
+      <a href="index.html" class="brand-wrapper">
+        <div class="brand-logo-container"><span>R</span></div>
+        <span class="brand-text">Rivora Arts & Sports Club</span>
+      </a>
+      <a href="login.html" class="btn btn-accent">Existing Member? Login</a>
+    </div>
+  </header>
+
+  <div class="auth-container">
+    <h2 style="color: var(--color-primary); margin-bottom: 0.5rem;">Join Rivora Club</h2>
+    <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Upon submission, applications remain pending until confirmed by club executives.</p>
+
+    <form id="register-form">
+      <div class="form-group">
+        <label for="official-name">Official Full Name (for legal register & elections)</label>
+        <input type="text" id="official-name" required placeholder="e.g., Yathukrishnan A.K.">
+      </div>
+
+      <div class="form-group">
+        <label for="nickname">Club Nickname (for match roster & games)</label>
+        <input type="text" id="nickname" required placeholder="e.g., Kannan">
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email Address (account authentication)</label>
+        <input type="email" id="email" required placeholder="you@example.com">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Create Password (min 8 characters)</label>
+        <input type="password" id="password" required minlength="8">
+      </div>
+
+      <div class="form-group">
+        <label for="avatar-input">Profile Photo (auto-compressed to 100KB–200KB)</label>
+        <input type="file" id="avatar-input" accept="image/*" required>
+      </div>
+
+      <div class="crop-preview-wrapper" id="crop-wrapper">
+        <img id="crop-preview-img" alt="Crop Area">
+      </div>
+
+      <div class="form-group">
+        <label for="fee-slab">Monthly Subscription Slab</label>
+        <select id="fee-slab">
+          <option value="regular_150">Regular Active Member (₹150 / month)</option>
+          <option value="other_30">General Supporter Member (₹30 / month)</option>
+        </select>
+      </div>
+
+      <button type="submit" id="submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Submit Application</button>
+    </form>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+  <script type="module">
+    import { supabase } from './js/supabase-client.js';
+    import { getOptimizedBlob, uploadToStorage } from './js/cropper-helper.js';
+
+    let cropper = null;
+    const avatarInput = document.getElementById('avatar-input');
+    const cropWrapper = document.getElementById('crop-wrapper');
+    const cropImg = document.getElementById('crop-preview-img');
+
+    avatarInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        cropImg.src = event.target.result;
+        cropWrapper.style.display = 'block';
+        if (cropper) cropper.destroy();
+        cropper = new Cropper(cropImg, { aspectRatio: 1, viewMode: 1 });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing Application...';
+
+      try {
+        if (!cropper) throw new Error('Please select and crop a profile image.');
+
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const officialName = document.getElementById('official-name').value.trim();
+        const nickname = document.getElementById('nickname').value.trim();
+        const feeType = document.getElementById('fee-slab').value;
+
+        // 1. Create Supabase Auth user
+        const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+        if (authError) throw authError;
+
+        const userId = authData.user.id;
+
+        // 2. Crop & compress profile photo
+        const croppedCanvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
+        const compressedBlob = await getOptimizedBlob(croppedCanvas, 100, 200);
+
+        // 3. Upload to Supabase Storage bucket 'avatars'
+        const avatarUrl = await uploadToStorage(supabase, 'avatars', `${userId}/profile.jpg`, compressedBlob);
+
+        // 4. Insert Profile record (Pending status, no Reg No allocated until executive approval)
+        const { error: profileError } = await supabase.from('profiles').insert([{
+          id: userId,
+          official_name: officialName,
+          nickname: nickname,
+          avatar_url: avatarUrl,
+          role: 'general',
+          status: 'pending',
+          fee_type: feeType
+        }]);
+
+        if (profileError) throw profileError;
+
+        alert('Application registered successfully! Status: Application Pending. Contact the President or Secretary for allocation of your Register Number.');
+        window.location.replace('login.html');
+      } catch (err) {
+        alert('Error: ' + err.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Application';
+      }
+    });
+  </script>
+</body>
+</html>
